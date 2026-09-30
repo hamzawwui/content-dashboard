@@ -1,0 +1,36 @@
+name: Sync Instagram Posts
+
+on:
+  schedule:
+    - cron: '0 6 * * *' # يعمل تلقائياً يومياً الساعة 6 صباحاً
+  workflow_dispatch: # يتيح لك تشغيله يدوياً بضغطة زر في أي وقت
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install requests
+
+      - name: Run Fetch Script
+        run: |
+          python fetch_posts.py
+
+      - name: Commit and Push if updated
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add posts.json || true
+          git diff --quiet && git diff --staged --quiet || (git commit -m "Auto-sync Instagram data" && git push)
