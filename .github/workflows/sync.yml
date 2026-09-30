@@ -2,8 +2,8 @@ name: Sync Instagram Posts
 
 on:
   schedule:
-    - cron: '0 6 * * *' # يعمل تلقائياً يومياً الساعة 6 صباحاً
-  workflow_dispatch: # يتيح لك تشغيله يدوياً بضغطة زر في أي وقت
+    - cron: '0 6 * * *'
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -20,7 +20,7 @@ jobs:
         with:
           python-version: '3.11'
 
-    - name: Install dependencies
+      - name: Install dependencies
         run: |
           pip install requests beautifulsoup4
 
