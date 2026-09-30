@@ -1,6 +1,6 @@
 import requests
 import json
-import os
+import re
 from datetime import datetime
 
 USERNAME = "hamzawwui"
@@ -13,7 +13,7 @@ def analyze_post(caption, is_video=True):
     has_funnel = any(k in caption_lower for k in lead_keywords)
     funnel_status = "نعم (تحويل للأصل الرقمي)" if has_funnel else "لا (بدون CTA)"
     
-    # 2. ميزان 80/20 (الفيديوهات السريعة جذب 80%، الكاروسيل والنصوص الطويلة زاوية خاصة 20%)
+    # 2. ميزان 80/20
     if not is_video or len(caption) > 280:
         cat = "20% زاوية خاصة"
         post_type = "كاروسيل / منشور عميق"
@@ -33,31 +33,36 @@ def analyze_post(caption, is_video=True):
         
     return post_type, cat, funnel_status, eval_score
 
-def fetch_instagram_data():
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0",
-        "x-ig-app-id": "936619743392459",
-        "Accept": "*/*",
-        "Accept-Language": "en-US,en;q=0.9,ar;q=0.8"
-    }
-    url = f"https://www.instagram.com/api/v1/users/web_profile_info/?username={USERNAME}"
+def fetch_data():
     posts_list = []
     
+    # مسار بديل موثوق لقراءة البروفايلات العامة بدون حظر السحابة
+    url = f"https://imginn.com/{USERNAME}/"
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+    }
+    
+    print(f"جاري جلب بيانات الحساب: {USERNAME}...")
     try:
-        res = requests.get(url, headers=headers, timeout=15)
+        res = requests.get(url, headers=headers, timeout=20)
+        print(f"حالة الاستجابة: {res.status_code}")
+        
         if res.status_code == 200:
-            data = res.json()
-            user_data = data.get("data", {}).get("user", {})
-            edges = user_data.get("edge_owner_to_timeline_media", {}).get("edges", [])
-            for edge in edges:
-                node = edge.get("node", {})
-                caption_edges = node.get("edge_media_to_caption", {}).get("edges", [])
-                caption = caption_edges[0].get("node", {}).get("text", "") if caption_edges else ""
-                timestamp = node.get("taken_at_timestamp")
-                date_str = datetime.fromtimestamp(timestamp).strftime("%Y-%m-%d") if timestamp else "غير محدد"
-                is_video = node.get("is_video", False)
-                likes = node.get("edge_liked_by", {}).get("count", 0)
-                comments = node.get("edge_media_to_comment", {}).get("count", 0)
+            # استخراج المنشورات والنصوص من عناصر الويب المفتوحة
+            from bs4 import BeautifulSoup
+            soup = BeautifulSoup(res.text, "html.parser")
+            items = soup.find_all("div", class_="item")
+            
+            for item in items[:12]: # سحب آخر 12 منشور
+                desc_el = item.find("div", class_="desc")
+                caption = desc_el.get_text(strip=True) if desc_el else ""
+                
+                # فحص هل البوست فيديو
+                is_video = bool(item.find("i", class_="icon-video"))
+                
+                # استخراج التاريخ إن وجد
+                time_el = item.find("span", class_="time")
+                date_str = time_el.get_text(strip=True) if time_el else datetime.now().strftime("%Y-%m-%d")
                 
                 post_type, cat, funnel, score = analyze_post(caption, is_video)
                 
@@ -65,19 +70,22 @@ def fetch_instagram_data():
                     "التاريخ": date_str,
                     "نوع المحتوى": post_type,
                     "التصنيف": cat,
-                    "النص": caption[:60] + "..." if len(caption) > 60 else caption,
+                    "النص": caption[:60] + "..." if len(caption) > 60 else (caption or "منشور بدون كابشن"),
                     "تحويل للأصل": funnel,
                     "التقييم النوعي": score,
-                    "تفاعل (إعجاب/تعليق)": f"❤️ {likes} | 💬 {comments}"
+                    "تفاعل (إعجاب/تعليق)": "📊 منشور مسجل"
                 })
     except Exception as e:
-        print("Notice:", e)
+        print(f"حدث خطأ أثناء الجلب: {e}")
         
     return posts_list
 
 if __name__ == "__main__":
-    posts = fetch_instagram_data()
+    posts = fetch_data()
+    print(f"عدد المنشورات المستخرجة: {len(posts)}")
     if posts:
         with open("posts.json", "w", encoding="utf-8") as f:
             json.dump(posts, f, ensure_ascii=False, indent=2)
-        print(f"تم تحديث {len(posts)} منشور بنجاح.")
+        print("تم حفظ posts.json بنجاح!")
+    else:
+        print("لم يتم العثور على منشورات لتسجيلها.")
